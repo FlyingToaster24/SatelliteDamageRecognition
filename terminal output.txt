@@ -1,0 +1,51 @@
+(xyz) PS C:\Users\IT-Support\Desktop\pythonProject> & c:/Users/IT-Support/Deskt
+Traceback (most recent call last):
+  File "c:\Users\IT-Support\Desktop\pythonProject\WithTensorboard.py", line 141
+C:\Users\IT-Support\Desktop\pythonProject\xyz\lib\site-packages\torchvision\mod 'weights' are deprecated since 0.13 and may be removed in the future. The currr 'pretrained_backbone' is deprecated since 0.13 and may be removed in the futu
+  warnings.warn(
+C:\Users\IT-Support\Desktop\pythonProject\xyz\lib\site-packages\torchvision\modher than a weight enum or `None` for 'weights_backbone' are deprecated since 0.rent behavior is equivalent to passing `weights_backbone=ResNet50_Weights.IMAGEe=ResNet50_Weights.DEFAULT` to get the most up-to-date weights.
+  warnings.warn(msg)
+GPU available
+Traceback (most recent call last):
+  File "c:\Users\IT-Support\Desktop\pythonProject\WithTensorboard.py", line 329
+    train_model(model=model, train_loader=train_loader, val_loader=val_loader, 
+  File "c:\Users\IT-Support\Desktop\pythonProject\WithTensorboard.py", line 198
+    loss_dict = model(images, targets)
+  File "C:\Users\IT-Support\Desktop\pythonProject\xyz\lib\site-packages\torch\npl
+    return forward_call(*args, **kwargs)
+  File "C:\Users\IT-Support\Desktop\pythonProject\xyz\lib\site-packages\torchvi
+line 95, in forward
+    torch._assert(
+                                                    & c:/Users/IT-Support/Desktt/Witssert condition, message
+hTensorboard.py
+C:\Users\IT-Support\Desktop\pythonProject\xyz\lib\site-packages\torchvision\mod.13 a
+nd may be removed in the future, please use 'weights' instead.
+  warnings.warn(
+C:\Users\IT-Support\Desktop\pythonProject\xyz\lib\site-packages\torchvision\mod 'wei                                               & c:/Users/IT-Support/Deskt                                                    & c:/Users/IT-Support/Desktt/WithTensorboard.py
+C:\Users\IT-Support\Desktop\pythonProject\xyz\lib\site-packages\torchvision\mod.13 and may be removed in the future, please use 'weights' instead.
+  warnings.warn(
+C:\Users\IT-Support\Desktop\pythonProject\xyz\lib\site-packages\torchvision\mod 'weights' are deprecated since 0.13 and may be removed in the future. The currOCO_V1`. You can also use `weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT` to 
+  warnings.warn(msg)
+C:\Users\IT-Support\Desktop\pythonProject\xyz\lib\site-packages\torchvision\modd since 0.13 and may be removed in the future, please use 'weights_backbone' in
+  warnings.warn(
+C:\Users\IT-Support\Desktop\pythonProject\xyz\lib\site-packages\torchvision\mod 'weights_backbone' are deprecated since 0.13 and may be removed in the future.s.IMAGENET1K_V1`. You can also use `weights_backbone=ResNet50_Weights.DEFAULT` 
+  warnings.warn(msg)
+9707] for target at index 2.
+Invalid Box:  All bounding boxes should have positive height and width. Found invalid box 
+[-66.9588623046875, 23.593050003051758, -66.9588623046875, 23.59312629699707] for target at index 2.
+Epoch 4/10 completed. Train Loss: 0.1164, Val Loss: 0.1057
+Invalid Box:  All bounding boxes should have positive height and width. Found invalid box 
+[-66.9588623046875, 23.593050003051758, -66.9588623046875, 23.59312629699707] for target at index 3.
+Invalid Box:  All bounding boxes should have positive height and width. Found invalid box 
+[-66.9588623046875, 23.593050003051758, -66.9588623046875, 23.59312629699707] for target at index 0.
+Epoch 5/10 completed. Train Loss: 0.1163, Val Loss: 0.1314
+Invalid Box:  All bounding boxes should have positive height and width. Found invalid box 
+[-66.9588623046875, 23.593050003051758, -66.9588623046875, 23.59312629699707] for target at index 1.
+Invalid Box:  All bounding boxes should have positive height and width. Found invalid box 
+[-66.9588623046875, 23.593050003051758, -66.9588623046875, 23.59312629699707] for target at index 3.
+Epoch 6/10 completed. Train Loss: 0.1124, Val Loss: 0.1222
+Invalid Box:  All bounding boxes should have positive height and width. Found invalid box 
+[-66.9588623046875, 23.593050003051758, -66.9588623046875, 23.59312629699707] for target at index 0.
+Invalid Box:  All bounding boxes should have positive height and width. Found invalid box 
+[-66.9588623046875, 23.593050003051758, -66.9588623046875, 23.59312629699707] for target at index 3.
+Early stopping after 7 epochs
