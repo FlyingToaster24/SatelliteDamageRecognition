@@ -6,7 +6,9 @@ from torchvision.transforms import functional as F
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+from torch_device_type import get_device
+
+device = torch.device(get_device())
 
 class_label_to_int = {
     'building-no-damage': 0,

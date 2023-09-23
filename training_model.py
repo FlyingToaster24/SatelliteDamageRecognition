@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import torch
 from torch.utils.data import Dataset
 from torchvision.models.detection import fasterrcnn_resnet50_fpn
@@ -9,7 +10,9 @@ import torchvision
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.model_selection import train_test_split
 from torchvision.transforms import ToTensor
+from multiprocessing import Pool
 
+from torch_device_type import get_device
 
 
 def transform(image, boxes, labels):
@@ -18,7 +21,8 @@ def transform(image, boxes, labels):
     image = torchvision.transforms.functional.resize(image, new_size)
     scale_x = new_size[0] / image.width
     scale_y = new_size[1] / image.height
-    boxes = boxes * torch.tensor([1/scale_x, 1/scale_y, 1/scale_x, 1/scale_y])  # Divide by scaling factors
+    # Divide by scaling factors
+    boxes = boxes * torch.tensor([1/scale_x, 1/scale_y, 1/scale_x, 1/scale_y])
 
     # Convert the image to a tensor
     image = torchvision.transforms.functional.to_tensor(image)
@@ -67,7 +71,6 @@ def collate_fn(batch):
     return images, new_targets
 
 
-
 class CustomObjectDetectionDataset(Dataset):
     def __init__(self, image_folder, annotations, transform=None):
         self.image_folder = image_folder
@@ -105,12 +108,14 @@ class CustomObjectDetectionDataset(Dataset):
 
         return image, targets
 
+
 def parse_wkt(wkt_string):
     # Assuming the wkt string starts with "POLYGON ((" and ends with "))"
     wkt_string = wkt_string[len("POLYGON (("):-len("))")]
     points = wkt_string.split(", ")
     x_coords, y_coords = zip(*[map(float, point.split()) for point in points])
-    x_min, y_min, x_max, y_max = min(x_coords), min(y_coords), max(x_coords), max(y_coords)
+    x_min, y_min, x_max, y_max = min(x_coords), min(
+        y_coords), max(x_coords), max(y_coords)
     return x_min, y_min, x_max, y_max
 
 
@@ -130,7 +135,8 @@ def parse_json(json_file, data):
     for entry in data['features']['lng_lat']:
         properties = entry['properties']
         feature_type = properties['feature_type']
-        subtype = properties.get('subtype', 'unknown')  # Provide a default value if 'subtype' is missing
+        # Provide a default value if 'subtype' is missing
+        subtype = properties.get('subtype', 'unknown')
         uid = properties['uid']
         wkt = entry['wkt']
 
@@ -165,8 +171,10 @@ def parse_json(json_file, data):
                 }
 
             # Append the box and label to the existing entry for this image name
-            annotations_dict[image_name]["boxes"].append([x_min, y_min, x_max, y_max])
-            annotations_dict[image_name]["labels"].append(class_label_to_int[class_label])
+            annotations_dict[image_name]["boxes"].append(
+                [x_min, y_min, x_max, y_max])
+            annotations_dict[image_name]["labels"].append(
+                class_label_to_int[class_label])
 
     return annotations_dict, image_name
 
@@ -183,13 +191,16 @@ def train_model(model, train_loader, val_loader, optimizer, num_epochs=10, patie
 
     # Loop over the number of epochs
     for epoch in range(num_epochs):
+        print(
+            f"Started epoch {epoch + 1}/{num_epochs}")
         train_loss = 0.0  # Variable to store training loss for the epoch
 
         # Loop over the batches of images and targets in the train loader
         for images, targets in train_loader:
             # Move the images and targets to the device
             images = list(image.to(device) for image in images)
-            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+            targets = [{k: v.to(device) for k, v in t.items()}
+                       for t in targets]
 
             # Reset the gradients of the optimizer
             optimizer.zero_grad()
@@ -214,7 +225,8 @@ def train_model(model, train_loader, val_loader, optimizer, num_epochs=10, patie
         with torch.no_grad():
             for val_images, val_targets in val_loader:  # Replace val_loader with your validation data loader
                 val_images = list(image.to(device) for image in val_images)
-                val_targets = [{k: v.to(device) for k, v in t.items()} for t in val_targets]
+                val_targets = [{k: v.to(device) for k, v in t.items()}
+                               for t in val_targets]
                 val_loss_dict = model(val_images, val_targets)
                 val_losses = sum(loss for loss in val_loss_dict.values())
                 val_loss += val_losses.item()
@@ -239,10 +251,31 @@ def train_model(model, train_loader, val_loader, optimizer, num_epochs=10, patie
         writer.add_scalar('Loss/Validation', avg_val_loss, epoch)
 
         # Print the epoch number and completion message
-        print(f"Epoch {epoch + 1}/{num_epochs} completed. Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
+        print(
+            f"Epoch {epoch + 1}/{num_epochs} completed. Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
 
     torch.save(best_model_state, 'object_detection_model.pth')
     writer.close()
+
+
+def read_annotation(json_filename):
+    image_name = os.path.splitext(os.path.basename(json_filename))[
+        0]  # Get the image name without extension
+
+    # Check if the JSON file should be processed based on the presence of 'wkt' key
+    with open(json_filename, 'r') as f:
+        data_parse = json.load(f)
+
+        data_array = data_parse.get('features', {}).get('lng_lat', [])
+
+        # Check if 'wkt' key exists in the JSON data
+        # Use a reversed loop to speed up the process
+        for entry in data_array:
+            if 'wkt' in entry:
+                annotations = parse_json(json_filename, data_parse)
+                return {image_name: annotations}
+
+    return {}
 
 
 def create_datasets(image_folder, json_files_folder, transform=None, test_size=0.2):
@@ -252,27 +285,26 @@ def create_datasets(image_folder, json_files_folder, transform=None, test_size=0
     # Initialize an empty dictionary to store annotations for each image
     all_annotations = {}
 
-    # Loop through each JSON file and parse its content
-    for json_file in json_files:
-        image_name = os.path.splitext(os.path.basename(json_file))[0]  # Get the image name without extension
+    with Pool(16) as p:  # Use 16 processes because why not
+        for i, data in enumerate(p.imap_unordered(read_annotation, json_files)):
+            sys.stderr.write(
+                '\rCreating datasets: {0:%}'.format(i/len(json_files)))
 
-        # Check if the JSON file should be processed based on the presence of 'wkt' key
-        with open(json_file, 'r') as f:
-            data_parse = json.load(f)
+            all_annotations.update(data)
 
-        # Check if 'wkt' key exists in the JSON data
-        if 'features' in data_parse and 'lng_lat' in data_parse['features']:
-            for entry in data_parse['features']['lng_lat']:
-                if 'wkt' in entry:
-                    annotations = parse_json(json_file, data_parse)
-                    all_annotations[image_name] = annotations
+        print()
+
+    print("Number of images with annotations:", len(all_annotations))
 
     # Split the annotations into training and validation sets
-    train_annotations, val_annotations = train_test_split(list(all_annotations.values()), test_size=test_size)
+    train_annotations, val_annotations = train_test_split(
+        list(all_annotations.values()), test_size=test_size)
 
     # Create the training and validation datasets
-    train_dataset = CustomObjectDetectionDataset(image_folder, train_annotations, transform=transform)
-    val_dataset = CustomObjectDetectionDataset(image_folder, val_annotations, transform=transform)
+    train_dataset = CustomObjectDetectionDataset(
+        image_folder, train_annotations, transform=transform)
+    val_dataset = CustomObjectDetectionDataset(
+        image_folder, val_annotations, transform=transform)
 
     return train_dataset, val_dataset
 
@@ -289,17 +321,29 @@ def should_process_json(json_file):
 
     return False
 
+
 if __name__ == '__main__':
+    device = torch.device(get_device())
+
     # Define paths to your dataset and JSON files folder
     image_folder = 'data/images'
     json_files_folder = 'data/labels'
 
-    train_dataset, val_dataset = create_datasets(image_folder, json_files_folder)
+    print("Creating datasets...")
+
+    train_dataset, val_dataset = create_datasets(
+        image_folder, json_files_folder)
+
+    print("Number of training examples:", len(train_dataset))
 
     # Define data loader
     # data_loader = torch.utils.data.DataLoader(combined_dataset, batch_size=4, shuffle=True, num_workers=4, collate_fn=collate_fn)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=4, shuffle=True, num_workers=4, collate_fn=collate_fn)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=4, shuffle=False, num_workers=4, collate_fn=collate_fn)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=4, shuffle=True, num_workers=4, collate_fn=collate_fn)
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset, batch_size=4, shuffle=False, num_workers=4, collate_fn=collate_fn)
+
+    print("Creating model...")
 
     # Rest of the code for training the model (same as before)
 
@@ -310,27 +354,25 @@ if __name__ == '__main__':
     # class_labels = set(annotation['labels'] for annotation in annotations)
     num_classes = 7  # +1 for background
     in_features = model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(in_features, num_classes)
+    model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(
+        in_features, num_classes)
 
-
+    print("Moving model to device...")
 
     # Set device for training (GPU if available, else CPU)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
-
-    if torch.cuda.is_available():
-        print("GPU available")
-    else:
-        print("CPU available")
 
     # Define the optimizer and learning rate scheduler
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.Adam(params, lr=0.0001)
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(
+        optimizer, step_size=3, gamma=0.1)
 
-
+    print("Training model...")
     # Train the model
-    train_model(model=model, train_loader=train_loader, val_loader=val_loader, optimizer=optimizer, num_epochs=10)
+    train_model(model=model, train_loader=train_loader,
+                val_loader=val_loader, optimizer=optimizer, num_epochs=10)
 
+    print("Saving model...")
     # Save the trained model for later use
-    # torch.save(model.state_dict(), 'object_detection_model.pth')
+    torch.save(model.state_dict(), 'object_detection_model.pth')
