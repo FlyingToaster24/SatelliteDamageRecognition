@@ -10,15 +10,8 @@ from torch_device_type import get_device
 
 device = torch.device(get_device())
 
-class_label_to_int = {
-    'building-no-damage': 0,
-    'building-unknown': 1,
-    'building-un-classified': 2,
-    'building-minor-damage': 3,
-    'building-major-damage': 4,
-    'building-destroyed': 5
-    # Add more class labels and corresponding integer values as needed
-}
+
+int_to_color = ["green", "yellow", "blue", "orange", "red", "white", "black"]
 
 # Load the trained model
 model = fasterrcnn_resnet50_fpn(pretrained=False, pretrained_backbone=False)
@@ -29,7 +22,7 @@ model.load_state_dict(torch.load('object_detection_model.pth', map_location=torc
 model.eval()
 model.to(device)  # Move the model to the same device used during training
 
-test_image_path = 'maraş2.png'
+test_image_path = 'test/maras-cropped.png'
 test_image = Image.open(test_image_path).convert('RGB')
 
 # Apply the same preprocessing transformations as during training
@@ -49,19 +42,21 @@ with torch.no_grad():
 predicted_boxes = pred[0]['boxes'].cpu()
 predicted_labels = pred[0]['labels'].cpu()
 
-# Draw the predicted bounding boxes on the image
 
+# Draw the predicted bounding boxes on the image
 fig, ax = plt.subplots(1)
 ax.imshow(test_image)
 
 for box, label in zip(predicted_boxes, predicted_labels):
     box = box.tolist()
-    rect = patches.Rectangle((box[0], box[1]), box[2] - box[0], box[3] - box[1], linewidth=1, edgecolor='r',
+    class_label = label.item()
+
+    print(box, class_label)
+
+    rect = patches.Rectangle((box[0], box[1]), box[2] - box[0], box[3] - box[1], linewidth=1, edgecolor=int_to_color[class_label],
                              facecolor='none')
     ax.add_patch(rect)
 
-
-    class_label = label.item()
-    ax.text(box[0], box[1], class_label, color='r')
+    # ax.text(box[0], box[1], class_label, color=int_to_color[class_label])
 
 plt.show()

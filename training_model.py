@@ -11,6 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 from sklearn.model_selection import train_test_split
 from torchvision.transforms import ToTensor
 from multiprocessing import Pool
+from shapely import wkt
 
 from torch_device_type import get_device
 
@@ -109,16 +110,6 @@ class CustomObjectDetectionDataset(Dataset):
         return image, targets
 
 
-def parse_wkt(wkt_string):
-    # Assuming the wkt string starts with "POLYGON ((" and ends with "))"
-    wkt_string = wkt_string[len("POLYGON (("):-len("))")]
-    points = wkt_string.split(", ")
-    x_coords, y_coords = zip(*[map(float, point.split()) for point in points])
-    x_min, y_min, x_max, y_max = min(x_coords), min(
-        y_coords), max(x_coords), max(y_coords)
-    return x_min, y_min, x_max, y_max
-
-
 def parse_json(json_file, data):
 
     class_label_to_int = {
@@ -132,32 +123,29 @@ def parse_json(json_file, data):
     }
 
     annotations_dict = {}
-    for entry in data['features']['lng_lat']:
+    for entry in data['features']['xy']:
         properties = entry['properties']
         feature_type = properties['feature_type']
         # Provide a default value if 'subtype' is missing
         subtype = properties.get('subtype', 'unknown')
         uid = properties['uid']
-        wkt = entry['wkt']
+        wkt_data = entry['wkt']
 
-        # Process the 'wkt' string to extract the bounding box coordinates
-        # Assuming the 'wkt' is in the format "POLYGON ((x_min y_min, x_max y_min, x_max y_max, x_min y_max, x_min y_min))"
+        class_label = f"{feature_type}-{subtype}"
 
-        # Split the 'wkt' string to get the coordinates
-        coords = wkt.split('((')[1].split('))')[0].split(',')
-        coords = [c.strip().split(' ') for c in coords]
-        coords = [[float(coord[0]), float(coord[1])] for coord in coords]
+        shape = wkt.loads(wkt_data)
+        if shape.geom_type != "Polygon" or class_label not in class_label_to_int:
+            continue
 
         # Extract the bounding box coordinates
-        x_min = min(coord[0] for coord in coords)
-        y_min = min(coord[1] for coord in coords)
-        x_max = max(coord[0] for coord in coords)
-        y_max = max(coord[1] for coord in coords)
+        x_min = shape.bounds[0]
+        y_min = shape.bounds[1]
+        x_max = shape.bounds[2]
+        y_max = shape.bounds[3]
 
         # Check if the bounding box is valid (width and height > 0)
         if x_min < x_max and y_min < y_max:
             # Extract the class label (e.g., 'building-no-damage')
-            class_label = f"{feature_type}-{subtype}"
 
             # Create a dictionary to store the annotation for this entry
             image_name = os.path.splitext(os.path.basename(json_file))[0]
@@ -266,10 +254,8 @@ def read_annotation(json_filename):
     with open(json_filename, 'r') as f:
         data_parse = json.load(f)
 
-        data_array = data_parse.get('features', {}).get('lng_lat', [])
+        data_array = data_parse.get('features', {}).get('xy', [])
 
-        # Check if 'wkt' key exists in the JSON data
-        # Use a reversed loop to speed up the process
         for entry in data_array:
             if 'wkt' in entry:
                 annotations = parse_json(json_filename, data_parse)
@@ -307,19 +293,6 @@ def create_datasets(image_folder, json_files_folder, transform=None, test_size=0
         image_folder, val_annotations, transform=transform)
 
     return train_dataset, val_dataset
-
-
-def should_process_json(json_file):
-    with open(json_file, 'r') as f:
-        data = json.load(f)
-
-    # Check if 'wkt' key exists in the JSON data
-    if 'features' in data and 'lng_lat' in data['features']:
-        for entry in data['features']['lng_lat']:
-            if 'wkt' in entry:
-                return True
-
-    return False
 
 
 if __name__ == '__main__':
