@@ -12,8 +12,60 @@ from sklearn.model_selection import train_test_split
 from torchvision.transforms import ToTensor
 from multiprocessing import Pool
 from shapely import wkt
+import time
 
 from torch_device_type import get_device
+
+
+class Progress:
+    start_time = None
+    prefix = None
+    bar_length = None
+
+    def __init__(self, prefix="Progress", bar_length=30, start_immediately=True):
+        self.prefix = prefix
+        self.bar_length = bar_length
+        if start_immediately:
+            self.start()
+
+    def start(self):
+        self.start_time = time.time()
+
+    def stop(self):
+        self.print(1, 1)
+        self.start_time = None
+        sys.stdout.write('\n')
+        sys.stdout.flush()
+
+    def format_time(self, seconds):
+        hours = int(seconds / 3600)
+        seconds -= hours * 3600
+        minutes = int(seconds / 60)
+        seconds -= minutes * 60
+        seconds = int(seconds)
+
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        else:
+            return f"{minutes:02d}:{seconds:02d}"
+
+    def print(self, current, total):
+        percent = float(current) * 100 / total
+        arrow = '-' * int(percent / 100 * self.bar_length - 1) + '>'
+        spaces = ' ' * (self.bar_length - len(arrow))
+
+        current_time = time.time()
+
+        if self.start_time is None:
+            self.start_time = current_time
+
+        elapsed_time = current_time - self.start_time
+
+        remaining_time = (elapsed_time / (current + 1)) * (total - current)
+
+        sys.stdout.write('\r%s: [%s%s] %d%% | Elapsed: %s | Remaining: %s' %
+                         (self.prefix, arrow, spaces, percent, self.format_time(elapsed_time), self.format_time(remaining_time)))
+        sys.stdout.flush()
 
 
 def transform(image, boxes, labels):
@@ -174,17 +226,21 @@ def train_model(model, train_loader, val_loader, optimizer, num_epochs=10, patie
     # Create a SummaryWriter for logging to TensorBoard
     writer = SummaryWriter()
 
+    train_loader_len = len(train_loader)
+
     # Set the model to training mode
     model.train()
 
     # Loop over the number of epochs
     for epoch in range(num_epochs):
-        print(
-            f"Started epoch {epoch + 1}/{num_epochs}")
         train_loss = 0.0  # Variable to store training loss for the epoch
 
+        training_progress = Progress(f"Epoch {epoch + 1}/{num_epochs}")
+
         # Loop over the batches of images and targets in the train loader
-        for images, targets in train_loader:
+        for i, (images, targets) in enumerate(train_loader):
+            training_progress.print(i, train_loader_len)
+
             # Move the images and targets to the device
             images = list(image.to(device) for image in images)
             targets = [{k: v.to(device) for k, v in t.items()}
@@ -197,7 +253,8 @@ def train_model(model, train_loader, val_loader, optimizer, num_epochs=10, patie
                 # Forward pass the images and targets through the model and get the loss dictionary
                 loss_dict = model(images, targets)
             except Exception as e:
-                print("Invalid Box: ", str(e))
+                # starting with \n because we don't want to print it on top of the progress bar
+                print("\nInvalid Box: ", str(e))
                 continue
 
             # Sum up the losses from the loss dictionary
@@ -208,16 +265,25 @@ def train_model(model, train_loader, val_loader, optimizer, num_epochs=10, patie
             losses.backward()
             optimizer.step()
 
+        training_progress.stop()
+
+        loss_progress = Progress(
+            f"Calculating validation loss for epoch {epoch + 1}/{num_epochs}")
         # Compute average validation loss
         val_loss = 0.0
         with torch.no_grad():
-            for val_images, val_targets in val_loader:  # Replace val_loader with your validation data loader
+            # Replace val_loader with your validation data loader
+            for i, (val_images, val_targets) in enumerate(val_loader):
+                loss_progress.print(i, len(val_loader))
+
                 val_images = list(image.to(device) for image in val_images)
                 val_targets = [{k: v.to(device) for k, v in t.items()}
                                for t in val_targets]
                 val_loss_dict = model(val_images, val_targets)
                 val_losses = sum(loss for loss in val_loss_dict.values())
                 val_loss += val_losses.item()
+
+        loss_progress.stop()
 
         # Early stopping
         if val_loss < best_val_loss:
@@ -241,6 +307,16 @@ def train_model(model, train_loader, val_loader, optimizer, num_epochs=10, patie
         # Print the epoch number and completion message
         print(
             f"Epoch {epoch + 1}/{num_epochs} completed. Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
+
+        print(f"Saving epoch {epoch + 1} model")
+
+        # if the models directory does not exist, create it
+        if not os.path.exists('models'):
+            os.makedirs('models')
+
+        # Save the trained model for later use
+        torch.save(model.state_dict(),
+                   os.path.join('models', f'epoch_{epoch + 1}.pth'))
 
     torch.save(best_model_state, 'object_detection_model.pth')
     writer.close()
@@ -272,13 +348,15 @@ def create_datasets(image_folder, json_files_folder, transform=None, test_size=0
     all_annotations = {}
 
     with Pool(16) as p:  # Use 16 processes because why not
+        progress = Progress("Creating datasets")
+        progress.start()
+
         for i, data in enumerate(p.imap_unordered(read_annotation, json_files)):
-            sys.stderr.write(
-                '\rCreating datasets: {0:%}'.format(i/len(json_files)))
+            progress.print(i, len(json_files))
 
             all_annotations.update(data)
 
-        print()
+        progress.stop()
 
     print("Number of images with annotations:", len(all_annotations))
 
@@ -302,8 +380,6 @@ if __name__ == '__main__':
     image_folder = 'data/images'
     json_files_folder = 'data/labels'
 
-    print("Creating datasets...")
-
     train_dataset, val_dataset = create_datasets(
         image_folder, json_files_folder)
 
@@ -315,8 +391,6 @@ if __name__ == '__main__':
         train_dataset, batch_size=4, shuffle=True, num_workers=4, collate_fn=collate_fn)
     val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=4, shuffle=False, num_workers=4, collate_fn=collate_fn)
-
-    print("Creating model...")
 
     # Rest of the code for training the model (same as before)
 
@@ -330,8 +404,6 @@ if __name__ == '__main__':
     model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(
         in_features, num_classes)
 
-    print("Moving model to device...")
-
     # Set device for training (GPU if available, else CPU)
     model = model.to(device)
 
@@ -341,11 +413,6 @@ if __name__ == '__main__':
     lr_scheduler = torch.optim.lr_scheduler.StepLR(
         optimizer, step_size=3, gamma=0.1)
 
-    print("Training model...")
     # Train the model
     train_model(model=model, train_loader=train_loader,
                 val_loader=val_loader, optimizer=optimizer, num_epochs=10)
-
-    print("Saving model...")
-    # Save the trained model for later use
-    torch.save(model.state_dict(), 'object_detection_model.pth')
