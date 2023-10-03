@@ -375,8 +375,8 @@ if __name__ == '__main__':
     device = torch.device(get_device())
 
     # Define paths to your dataset and JSON files folder
-    image_folder = 'data/images'
-    json_files_folder = 'data/labels'
+    image_folder = 'test-data/images'
+    json_files_folder = 'test-data/labels'
 
     train_dataset, val_dataset = create_datasets(
         image_folder, json_files_folder, transform=transform)
