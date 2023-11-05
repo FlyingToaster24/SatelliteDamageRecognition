@@ -3,7 +3,8 @@ import os
 import sys
 import torch
 from torch.utils.data import Dataset
-from torchvision.models.detection import fasterrcnn_resnet50_fpn
+# from torchvision.models.detection import fasterrcnn_resnet50_fpn
+from torchvision.models.segmentation import fcn_resnet50
 from PIL import Image
 import glob
 import torchvision
@@ -83,41 +84,52 @@ def transform(image, boxes, labels, mean, std):
     return image, boxes, labels
 
 
+# def collate_fn(batch):
+#     images, targets = zip(*batch)
+#     images = list(images)
+#
+#     # Create a new list to store the modified targets
+#     new_targets = []
+#
+#     # Loop over each target dictionary in the original targets list
+#     for target_dict in targets:
+#         # Create a new dictionary to store the modified key-value pairs
+#         new_target_dict = {}
+#
+#         # Loop over each key-value pair in the target dictionary
+#         for key, value in target_dict.items():
+#             if key == 'boxes':
+#                 # Get the mask from the target dictionary
+#                 mask = target_dict['mask']
+#
+#                 # Use the mask to filter valid bounding boxes
+#                 value = value[mask]
+#             elif key == 'labels':
+#                 # Get the mask from the target dictionary
+#                 mask = target_dict['mask']
+#
+#                 # Use the mask to filter valid labels
+#                 value = value[mask]
+#
+#             # Assign the modified value to the same key in the new dictionary
+#             new_target_dict[key] = value
+#
+#         # Append the new dictionary to the new list
+#         new_targets.append(new_target_dict)
+#
+#     return images, new_targets
+
 def collate_fn(batch):
     images, targets = zip(*batch)
     images = list(images)
 
-    # Create a new list to store the modified targets
     new_targets = []
-
-    # Loop over each target dictionary in the original targets list
-    for target_dict in targets:
-        # Create a new dictionary to store the modified key-value pairs
-        new_target_dict = {}
-
-        # Loop over each key-value pair in the target dictionary
-        for key, value in target_dict.items():
-            if key == 'boxes':
-                # Get the mask from the target dictionary
-                mask = target_dict['mask']
-
-                # Use the mask to filter valid bounding boxes
-                value = value[mask]
-            elif key == 'labels':
-                # Get the mask from the target dictionary
-                mask = target_dict['mask']
-
-                # Use the mask to filter valid labels
-                value = value[mask]
-
-            # Assign the modified value to the same key in the new dictionary
-            new_target_dict[key] = value
-
-        # Append the new dictionary to the new list
-        new_targets.append(new_target_dict)
+    for target in targets:
+        # Modify target masks to the same size as the input images
+        target = torch.nn.functional.interpolate(target.unsqueeze(0), size=images[0].shape[-2:], mode='bilinear', align_corners=False)
+        new_targets.append(target.squeeze(0))
 
     return images, new_targets
-
 
 class CustomObjectDetectionDataset(Dataset):
     def __init__(self, image_folder, annotations, transform):
@@ -375,8 +387,8 @@ if __name__ == '__main__':
     device = torch.device(get_device())
 
     # Define paths to your dataset and JSON files folder
-    image_folder = 'test-data/images'
-    json_files_folder = 'test-data/labels'
+    image_folder = 'test/images'
+    json_files_folder = 'test/labels'
 
     train_dataset, val_dataset = create_datasets(
         image_folder, json_files_folder, transform=transform)
@@ -393,7 +405,7 @@ if __name__ == '__main__':
     # Rest of the code for training the model (same as before)
 
     # Use a pre-trained Faster R-CNN model with ResNet-50 backbone
-    model = fasterrcnn_resnet50_fpn(pretrained=True, pretrained_backbone=True)
+    model = fcn_resnet50(pretrained=True, num_classes=6)
 
     # Modify the model's output layer to match the number of target classes
     # class_labels = set(annotation['labels'] for annotation in annotations)
