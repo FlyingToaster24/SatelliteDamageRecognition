@@ -217,7 +217,7 @@ def parse_json(json_file, data):
     return annotations_dict, image_name
 
 
-def train_model(model, train_loader, val_loader, optimizer, num_epochs=10, patience=3):
+def train_model(model, train_loader, val_loader, optimizer, num_epochs=50, patience=25):
     best_val_loss = float('inf')
     best_model_state = None
 
@@ -332,6 +332,16 @@ def read_annotation(json_filename):
 
         for entry in data_array:
             if 'wkt' in entry:
+
+                properties = entry['properties']
+                feature_type = properties['feature_type']
+                subtype = properties.get('subtype', 'unknown')
+                class_label = f"{feature_type}-{subtype}"
+
+                # Only process polygons with desired labels
+                if class_label not in ["building-no-damage", "building-destroyed"]:
+                    continue
+
                 annotations = parse_json(json_filename, data_parse)
                 return {image_name: annotations}
 
@@ -375,8 +385,8 @@ if __name__ == '__main__':
     device = torch.device(get_device())
 
     # Define paths to your dataset and JSON files folder
-    image_folder = 'test-data/images'
-    json_files_folder = 'test-data/labels'
+    image_folder = 'data/images'
+    json_files_folder = 'data/labels'
 
     train_dataset, val_dataset = create_datasets(
         image_folder, json_files_folder, transform=transform)

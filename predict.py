@@ -22,7 +22,7 @@ model.load_state_dict(torch.load('object_detection_model.pth', map_location=torc
 model.eval()
 model.to(device)  # Move the model to the same device used during training
 
-test_image_path = 'maraş2.png'
+test_image_path = 'maraş.png'
 test_image = Image.open(test_image_path).convert('RGB')
 
 # Apply the same preprocessing transformations as during training
@@ -57,6 +57,6 @@ for box, label in zip(predicted_boxes, predicted_labels):
                              facecolor='none')
     ax.add_patch(rect)
 
-    # ax.text(box[0], box[1], class_label, color=int_to_color[class_label])
+    ax.text(box[0], box[1], class_label, color=int_to_color[class_label])
 
 plt.show()
