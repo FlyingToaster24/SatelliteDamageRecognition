@@ -68,16 +68,21 @@ class Progress:
         sys.stdout.flush()
 
 
-def transform(image, boxes, labels, mean, std):
+def transform(image, boxes, labels):
     # Resize the image and the boxes
-    new_size = (1024, 1024)
-    image = torchvision.transforms.functional.resize(image, new_size, antialias=True)
-    scale_x = new_size[0] / image.size()[1]
-    scale_y = new_size[1] / image.size()[0]
+    new_size = (224, 224)
+    image = torchvision.transforms.functional.resize(image, new_size)
+    scale_x = new_size[0] / image.width
+    scale_y = new_size[1] / image.height
     # Divide by scaling factors
     boxes = boxes * torch.tensor([1/scale_x, 1/scale_y, 1/scale_x, 1/scale_y])
 
+    # Convert the image to a tensor
+    image = torchvision.transforms.functional.to_tensor(image)
+
     # Normalize the image
+    mean = torch.tensor([0.485, 0.456, 0.406])
+    std = torch.tensor([0.229, 0.224, 0.225])
     image = torchvision.transforms.functional.normalize(image, mean, std)
 
     return image, boxes, labels
@@ -120,7 +125,7 @@ def collate_fn(batch):
 
 
 class CustomObjectDetectionDataset(Dataset):
-    def __init__(self, image_folder, annotations, transform):
+    def __init__(self, image_folder, annotations, transform=None):
         self.image_folder = image_folder
         self.annotations = annotations
         self.transform = transform
@@ -138,10 +143,7 @@ class CustomObjectDetectionDataset(Dataset):
         image = ToTensor()(image)
 
         if self.transform is not None:
-            mean, std = torch.tensor([0.485, 0.456, 0.406]), torch.tensor(
-                [0.229, 0.224, 0.225])
-            image, boxes, labels = self.transform(
-                image, boxes, labels, mean, std)
+            image, boxes, labels = self.transform(image, boxes, labels)
 
         # Set a fixed length for the padding, such as 50
         max_length = 50
@@ -379,7 +381,7 @@ if __name__ == '__main__':
     json_files_folder = 'test-data/labels'
 
     train_dataset, val_dataset = create_datasets(
-        image_folder, json_files_folder, transform=transform)
+        image_folder, json_files_folder)
 
     print("Number of training examples:", len(train_dataset))
 
