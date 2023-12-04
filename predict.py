@@ -26,7 +26,7 @@ test_image_path = 'test/maras-cropped.png'
 test_image = Image.open(test_image_path).convert('RGB')
 
 # Apply the same preprocessing transformations as during training
-new_size = (224, 224)
+new_size = (1024, 1024)
 test_image = F.resize(test_image, new_size)
 test_image_tensor = F.to_tensor(test_image)
 mean = torch.tensor([0.485, 0.456, 0.406])
